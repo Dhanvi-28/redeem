@@ -4,6 +4,12 @@ The original repository contained only a browser simulation. EcoSync now include
 
 The original simulation is preserved at `/simulation.html`, isolated from application records. Its reset-during-deposit crash, stale reward confirmation and out-of-stock redemption were fixed. Its illustrative balance and stock never enter MongoDB.
 
+## Challenge digital twin — no hardware required
+
+Open **Digital Twin** in the main navigation, or visit `http://localhost:3000/#twin`. It is available without login. The embedded interactive model runs both units: choose a material and weight, watch identification/classification/weighing/sorting stages, and choose Save to wallet or Redeem now. Simulated balances, product stock and event history update together. Use Reset to start again, or Open full view for more space. Reloading the page starts a new demo.
+
+This explicitly labelled simulation needs no physical hardware, AI endpoint or controller credentials. Its illustrative wallet and inventory stay separate from MongoDB citizen records. The future controller-backed twin remains available to administrators under **Controller Status** (`#machine-status`); the challenge presentation uses the interactive twin by default.
+
 ## Local setup
 
 Prerequisites: Node.js 24 LTS and MongoDB Community Server with `mongod` installed. A MongoDB replica set is required; standalone MongoDB is rejected. Atlas also works. The helper recognizes the installed Windows MongoDB 8.2 path; otherwise put `mongod` on PATH or set `MONGOD_PATH` to the executable.

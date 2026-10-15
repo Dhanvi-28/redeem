@@ -18,7 +18,8 @@ function redemptionRows(rows, operations = false) { return table(['Date', 'Rewar
 function nav() {
   $('#account').innerHTML = user ? `<span>${escape(user.name)}</span><button class="secondary" id="logout">Log out</button>` : '<a href="#login">Log in</a><a class="button secondary" href="#register">Sign up</a>';
   const links = user ? [['home', 'Dashboard'], ['scan', 'Scan Waste'], ['qr', 'My Eco ID'], ['wallet', 'My Wallet'], ['rewards', 'Rewards Store'], ['history', 'Recycling History'], ['profile', 'Profile']] : [['home', 'Home'], ['login', 'Log in'], ['register', 'Create account']];
-  if (user?.role === 'admin') links.push(['admin', 'Operations'], ['twin', 'Digital Twin'], ['machines', 'Machines'], ['inventory', 'Rewards & Inventory'], ['orders', 'Redemptions'], ['users', 'Users & RFID']);
+  links.push(['twin', 'Digital Twin']);
+  if (user?.role === 'admin') links.push(['admin', 'Operations'], ['machine-status', 'Controller Status'], ['machines', 'Machines'], ['inventory', 'Rewards & Inventory'], ['orders', 'Redemptions'], ['users', 'Users & RFID']);
   const current = location.hash.slice(1) || 'home';
   $('#nav').innerHTML = links.map(([path, label]) => `<a href="#${path}" ${path === current ? 'class="active" aria-current="page"' : ''}>${label}</a>`).join('');
   if ($('#logout')) $('#logout').onclick = async () => { try { await api('/auth/logout', { method: 'POST' }); user = null; location.hash = 'home'; await render(); } catch (e) { notice(e.message); } };
@@ -36,8 +37,8 @@ async function render() {
   const main = $('#main'); main.innerHTML = '<p role="status">Loading…</p>'; main.setAttribute('aria-busy', 'true');
   const show = html => { if (routeVersion === version) main.innerHTML = html; };
   try {
-    if (!user && !['home', 'login', 'register'].includes(page)) { location.hash = 'login'; return; }
-    if (['admin', 'twin', 'machines', 'inventory', 'orders', 'users'].includes(page) && user?.role !== 'admin') throw new Error('Administrator access required.');
+    if (!user && !['home', 'login', 'register', 'twin'].includes(page)) { location.hash = 'login'; return; }
+    if (['admin', 'machine-status', 'machines', 'inventory', 'orders', 'users'].includes(page) && user?.role !== 'admin') throw new Error('Administrator access required.');
     if (page === 'home' && !user) {
       show(`<section class="hero"><div class="eyebrow">FROM WASTE TO WHAT’S NEXT</div><h1>Recycle with purpose.<br>Keep the rewards.</h1><p>Identify yourself at a connected EcoSync station, deposit accepted materials, and earn points from verified weight readings. Save your points or use them for configured rewards.</p><div class="actions"><a class="button" href="#register">Create your Eco ID ↗</a><a class="button secondary" href="#login">Log in to your wallet</a></div></section><div class="grid"><section class="card"><span class="stepnum">01 / IDENTIFY</span><h2>One permanent Eco ID</h2><p>Your personal QR identifies your account at the waste-deposit unit. Sign in online with your email and password.</p></section><section class="card"><span class="stepnum">02 / DEPOSIT</span><h2>Measured, then rewarded</h2><p>A connected controller submits classification, stable weight and sorting confirmation. The server validates the deposit and calculates points.</p></section><section class="card"><span class="stepnum">03 / CHOOSE</span><h2>Save or redeem</h2><p>Keep points in your wallet, or redeem at the attached product unit. Delivery is recorded only after controller confirmation.</p></section></div><div class="info">Hardware and AI features require configured services. The linked simulation is separate from all accounts, wallets and machine records.</div>`);
     } else if (page === 'login' || page === 'register') {
@@ -98,6 +99,8 @@ async function render() {
       const d = await api('/admin/overview');
       show(`${head('Operations overview', 'Metrics calculated from persisted records.')}<div class="stats">${[[d.users, 'Registered users'], [d.deposits, 'Verified deposits'], [(d.weightGrams / 1000).toFixed(3) + ' kg', 'Accepted waste'], [d.pointsIssued, 'Points issued'], [d.pointsSpent, 'Net points spent'], [d.pendingRedemptions, 'Pending redemptions']].map(([n, label]) => `<section class="card stat"><small>${label}</small><strong>${n}</strong></section>`).join('')}</div><section class="card"><h2>Verified deposits</h2><div id="admin-deposits">${depositRows(await api('/admin/deposits'))}</div></section><div class="actions"><a class="button" href="#twin">Open digital twin</a><a class="button secondary" href="#machines">Configure controllers</a></div>`);
     } else if (page === 'twin') {
+      show(`${head('Interactive digital twin', 'Explore the complete two-unit recycling workflow without physical hardware.', '<a class="button secondary" href="/simulation.html" target="_blank" rel="noopener">Open full view ↗</a>')}<div class="info"><strong>Challenge simulation</strong> · Choose a material and weight, run a deposit, then save points or redeem a product. Machine stages, readings, points and inventory are simulated. This workspace never changes your real wallet or database records. Reloading the twin resets the demo.</div><iframe class="simulation-frame" src="/simulation.html" title="EcoSync interactive two-unit digital twin"></iframe>`);
+    } else if (page === 'machine-status') {
       show(`${head('Machine digital twin', 'Persisted state from authenticated controllers. Polls every 5 seconds.', '<button id="refresh" class="secondary">Refresh</button>')}<div id="twin-content"></div>`);
       const update = async () => { const d = await api('/admin/twin'); if (routeVersion !== version) return; $('#twin-content').innerHTML = twin(d); };
       await update(); if (routeVersion !== version) return; $('#refresh').onclick = () => update().catch(e => notice(e.message));

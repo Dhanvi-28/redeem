@@ -3,6 +3,26 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
+test('challenge twin is public, embeds the interactive model and never calls admin machine APIs', async () => {
+  const elements = new Map(), calls = [];
+  const element = selector => {
+    if (!elements.has(selector)) elements.set(selector, { innerHTML: '', setAttribute() {} });
+    return elements.get(selector);
+  };
+  const context = vm.createContext({
+    document: { querySelector: element }, location: { hash: '#twin' },
+    window: { addEventListener() {} },
+    fetch: async path => { calls.push(path); return { ok: false, status: 401, json: async () => ({ error: 'Please log in.' }) }; },
+  });
+  vm.runInContext(readFileSync(new URL('../public/app.js', import.meta.url), 'utf8'), context);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(element('#main').innerHTML, /Challenge simulation/);
+  assert.match(element('#main').innerHTML, /src="\/simulation.html"/);
+  assert.match(element('#nav').innerHTML, /Digital Twin/);
+  assert.equal(context.location.hash, '#twin');
+  assert.deepEqual(calls, ['/api/me']);
+});
+
 test('store recovers a committed interrupted redemption when its product is no longer in the catalogue', async () => {
   const source = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   const storageKey = 'redeem:citizen:product', key = 'original-request-key';
