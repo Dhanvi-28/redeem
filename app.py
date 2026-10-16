@@ -141,7 +141,10 @@ def load_classifier(weights_path_str: str):
 
 # Sidebar
 with st.sidebar:
-    st.image("https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=400&q=80", use_container_width=True)
+    try:
+        st.image("https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=400&q=80", use_container_width=True)
+    except Exception:
+        pass
     st.title("♻️ EcoSort AI")
     st.markdown("Automated waste classification powered by **Ultralytics YOLO11**.")
     
