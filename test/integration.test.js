@@ -234,6 +234,8 @@ test('twin preserves sensor timestamps across heartbeats and never marks disable
   const twin = (await admin.get('/api/admin/twin')).body;
   const disabled = twin.machines.find(m => m.machineId === 'test-waste');
   assert.equal(disabled.connected, false); assert.equal(disabled.integrationStatus, 'disabled');
+  assert.deepEqual(disabled.categories, before.categories);
+  assert.equal(disabled.pairedMachineId, before.pairedMachineId);
   const vending = twin.machines.find(m => m.machineId === 'test-vending');
   assert.ok(vending.inventory.length > 0); assert.equal(vending.pendingDispenses, 0);
   await controller('/identify', { qrToken }).expect(401);
@@ -247,4 +249,33 @@ test('inventory cannot move fulfillment location while orders await delivery or 
   await write(admin, `/api/admin/rewards/${rewardId}`, update, 'patch').expect(409);
   await write(admin, `/api/admin/redemptions/${order.body._id}/outcome`, { status: 'failed' }).expect(200);
   await write(admin, `/api/admin/rewards/${rewardId}`, { ...update, stock: 2, version: 2 }, 'patch').expect(200);
+});
+
+test('controller recovers the same committed command after redemption session TTL cleanup', async () => {
+  await controller('/events', { eventId: 'retry-recovery-heartbeat', observedAt: new Date().toISOString() }, vendCredential).expect(200);
+  const dep = await deposit('retry-recovery-deposit');
+  const choice = await controller(`/deposits/${dep.response.body._id}/choice`, { choice: 'redeem' }).expect(200);
+  const rewardId = await addReward({ machineId: 'test-vending', pointsPrice: 1 });
+  const body = { sessionId: choice.body.sessionId, rewardId }, key = 'ttl-recovery-order';
+  const first = await controller('/redeem', body, vendCredential).set('Idempotency-Key', key).expect(200);
+  await db.collection('redemptionSessions').deleteOne({ _id: body.sessionId });
+  const balance = (await owner.get('/api/wallet')).body.wallet.balance;
+  const retry = await controller('/redeem', body, vendCredential).set('Idempotency-Key', key).expect(200);
+  assert.equal(retry.body._id, first.body._id);
+  assert.equal((await owner.get('/api/wallet')).body.wallet.balance, balance);
+  await controller('/redeem', body).set('Idempotency-Key', key).expect(404);
+  await controller('/redeem', { ...body, rewardId: '000000000000000000000000' }, vendCredential).set('Idempotency-Key', key).expect(404);
+});
+
+test('twin orders timestamps chronologically across different fractional precision', async () => {
+  const second = new Date(Math.floor(Date.now() / 1000) * 1000 - 2000);
+  const coarse = second.toISOString().replace('.000Z', 'Z');
+  const fine = new Date(second.getTime() + 100).toISOString();
+  await db.collection('machines').updateOne({ machineId: 'test-waste' }, { $unset: { observedAt: '' } });
+  await controller('/events', { eventId: 'precision-coarse-first', observedAt: coarse, compartments: [{ category: 'pet', fillPercent: 10 }] }).expect(200);
+  await controller('/events', { eventId: 'precision-fine-newer', observedAt: fine, compartments: [{ category: 'pet', fillPercent: 20 }] }).expect(200);
+  await controller('/events', { eventId: 'precision-coarse-older', observedAt: coarse, compartments: [{ category: 'pet', fillPercent: 30 }] }).expect(200);
+  const machine = (await admin.get('/api/admin/twin')).body.machines.find(m => m.machineId === 'test-waste');
+  assert.equal(machine.observedAt, fine);
+  assert.equal(machine.compartments[0].fillPercent, 20);
 });

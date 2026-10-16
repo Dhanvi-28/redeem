@@ -94,6 +94,8 @@ All paths below are relative to `/api/machine`. Controllers use bearer authentic
 3. Display returned category, weight, points and deposit `_id` at the waste screen. `POST /deposits/:id/choice` accepts `{ "choice": "save" }` or `{ "choice": "redeem" }`. Redeem requires a paired enabled product unit with recent telemetry, and returns an expiring single-use redemption `sessionId`. If unavailable, points stay in the wallet. Save needs no product unit.
 4. The product controller polls `GET /commands`. `activations` holds eligible redemption sessions, `rewards` holds its stocked catalogue, and `commands` holds authorized dispensing work. The kiosk must associate selections with the correct session rather than activate for unrelated visitors. `POST /redeem` with `{ "sessionId": "<redemption-session>", "rewardId": "<catalogue-id>" }` and an `Idempotency-Key` authorizes one purchase. Arbitrary citizen IDs are rejected.
 5. Dispense only returned commands. Stable `commandId` equals redemption `_id`; commands remain until finalized. **The controller must durably deduplicate command IDs before actuating**, including after crashes/restarts. Repeated polls must never actuate twice. Exactly-once physical actuation cannot be guaranteed by an HTTP server alone.
+
+   Retry `/redeem` with the original session ID, reward ID and idempotency key after an interrupted response. An exact retry by the assigned controller recovers the committed order even after MongoDB TTL cleanup removes its redemption session; it never creates a second command or debit. Retain these original request values in the controller's durable journal.
 6. `POST /redemptions/:id/outcome` accepts `{ "eventId": "<unique-outcome-event>", "status": "dispensed" }` or `"failed"`. Retry the same outcome after network loss. Never report failed when delivery is uncertain.
 7. Send new telemetry every 30 seconds using `POST /events`:
 
@@ -109,6 +111,8 @@ All paths below are relative to `/api/machine`. Controllers use bearer authentic
    Omit compartments without sensors. Exact retries never refresh connectivity; older observations cannot replace newer measurements. `connected` means accepted contact within 90 seconds, not proof of every subsystem's health. The twin polls every five seconds and retains timestamped stale readings. Without configured units it shows unavailable. Pair arrows represent configuration, not proof of a physical link.
 
 The twin shows database inventory for each product unit and its pending dispense command count. These are reservations and configured stock, not sensor verification of physical stock. Compartment and alert timestamps remain attached to their last actual report when later heartbeats omit those fields. Older records without those timestamps show “Not reported”; new telemetry supplies them. Disabled units always report disconnected. Outcome event IDs remain bound to their original command/status even after finalization.
+
+Telemetry timestamps are compared as instants, including when controllers use different fractional-second precision (for example, `...00Z` and `...00.100Z`). A later reading replaces an earlier reading; older readings never overwrite current sensor state.
 
 ## Real classifier adapter
 

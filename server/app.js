@@ -159,6 +159,9 @@ export function createApp({ db, client, config }) {
   });
   app.post('/api/machine/redeem', async (req, res) => {
     const input = parse(z.object({ sessionId: secret, rewardId: text }).strict(), req.body), key = parse(eventId, req.get('idempotency-key'));
+    // TTL cleanup must not make a committed command impossible to recover.
+    const committed = await c('redemptions').findOne({ machineId: req.machine.machineId, key, fingerprint: hash(JSON.stringify({ rewardId: input.rewardId, sessionId: input.sessionId })) });
+    if (committed) return res.json(cleanRedemption(committed));
     const rs = await c('redemptionSessions').findOne({ _id: input.sessionId, machineId: req.machine.machineId });
     if (!rs) fail(404, 'Redemption session not found.');
     res.json(cleanRedemption(await core.redeem(rs.userId, input, key, req.machine)));
@@ -184,7 +187,8 @@ export function createApp({ db, client, config }) {
       if (prior) { if (prior.fingerprint !== fingerprint) fail(409, 'Event ID already used.'); return; }
       if (Math.abs(Date.now() - Date.parse(input.observedAt)) > 300000) fail(422, 'Telemetry timestamp is stale.');
       await c('machineEvents').insertOne({ ...input, fingerprint, machineId: req.machine.machineId, kind: 'telemetry', createdAt: new Date() }, { session });
-      await c('machines').updateOne({ _id: req.machine._id, $or: [{ observedAt: { $lt: input.observedAt } }, { observedAt: { $exists: false } }] }, { $set: { lastSeenAt: new Date(), observedAt: input.observedAt, ...(input.compartments ? { compartments: input.compartments, compartmentsObservedAt: input.observedAt } : {}), ...(input.alert !== undefined ? { alert: input.alert, alertObservedAt: input.observedAt } : {}) } }, { session });
+      // ISO timestamps allow different fractional precision; string order is not time order.
+      await c('machines').updateOne({ _id: req.machine._id, $expr: { $lt: [{ $convert: { input: '$observedAt', to: 'date', onError: new Date(0), onNull: new Date(0) } }, new Date(input.observedAt)] } }, { $set: { lastSeenAt: new Date(), observedAt: input.observedAt, ...(input.compartments ? { compartments: input.compartments, compartmentsObservedAt: input.observedAt } : {}), ...(input.alert !== undefined ? { alert: input.alert, alertObservedAt: input.observedAt } : {}) } }, { session });
     });
     res.json({ ok: true });
   });
@@ -220,7 +224,8 @@ export function createApp({ db, client, config }) {
     res.status(201).json({ machineId: input.machineId, credential });
   });
   app.patch('/api/admin/machines/:id', async (req, res) => {
-    const input = parse(machineSchema.omit({ machineId: true, type: true }).partial(), req.body);
+    // Creation defaults must not reset omitted fields during a partial edit.
+    const input = parse(machineSchema.omit({ machineId: true, type: true }).extend({ pairedMachineId: machineSchema.shape.pairedMachineId.removeDefault(), location: machineSchema.shape.location.removeDefault(), enabled: machineSchema.shape.enabled.removeDefault(), categories: machineSchema.shape.categories.removeDefault() }).partial(), req.body);
     if (input.categories && new Set(input.categories.map(x => x.category)).size !== input.categories.length) fail(422, 'Duplicate category rules.');
     const result = await c('machines').updateOne({ machineId: req.params.id }, { $set: input });
     if (!result.matchedCount) fail(404, 'Machine not found.'); res.json({ ok: true });
