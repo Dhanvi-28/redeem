@@ -107,7 +107,7 @@ async function render() {
       const d = await api('/admin/overview');
       show(`${head('Operations overview', 'Metrics calculated from persisted records.')}<div class="stats">${[[d.users, demoMode() ? 'Demo participant' : 'Registered users'], [d.deposits, demoMode() ? 'Simulated deposits' : 'Verified deposits'], [(d.weightGrams / 1000).toFixed(3) + ' kg', 'Accepted waste'], [d.pointsIssued, 'Points issued'], [d.pointsSpent, 'Net points spent'], [d.pendingRedemptions, 'Pending redemptions']].map(([n, label]) => `<section class="card stat"><small>${label}</small><strong>${n}</strong></section>`).join('')}</div><section class="card"><h2>${demoMode() ? 'Simulated deposits' : 'Verified deposits'}</h2><div id="admin-deposits">${depositRows(await api('/admin/deposits'))}</div></section><div class="actions"><a class="button" href="#twin">Open digital twin</a><a class="button secondary" href="#machines">Configure controllers</a></div>`);
     } else if (page === 'twin') {
-      show(`${head('Interactive digital twin', 'Explore the complete two-unit recycling workflow without physical hardware.', '<a class="button secondary" href="/simulation.html" target="_blank" rel="noopener">Open full view ↗</a>')}<div class="info"><strong>Challenge simulation</strong> · Choose a material and weight, run a deposit, then save points or redeem a product. Machine stages, readings, points and inventory are simulated. Running or resetting the twin switches the dashboard, wallet, history and store to synchronized demo data. Account records remain available through Use account data. Demo history, points and inventory are saved in this browser across navigation and reloads. Use Reset inside the twin to clear them.</div><iframe class="simulation-frame" src="/simulation.html" title="EcoSync interactive two-unit digital twin"></iframe>`);
+      show(`${head('Interactive digital twin', 'Explore the complete two-unit recycling workflow without physical hardware.', '<a class="button secondary" href="/simulation.html" target="_blank" rel="noopener">Open full view ↗</a>')}<div class="info"><strong>Challenge simulation</strong> · Choose a material and weight, run a deposit, then save points or redeem a product. Machine stages, readings, points and inventory are simulated. Running or resetting the twin switches the dashboard, wallet, history and store to synchronized demo data. Account records remain available through Use account data. Demo history, points and inventory are saved in this browser across navigation and reloads. Use Reset inside the twin to clear them.</div><iframe id="twin-frame" class="simulation-frame" src="/simulation.html" title="EcoSync interactive two-unit digital twin"></iframe>`);
     } else if (page === 'machine-status') {
       show(`${head('Machine digital twin', 'Persisted state from authenticated controllers. Polls every 5 seconds.', '<button id="refresh" class="secondary">Refresh</button>')}<div id="twin-content"></div>`);
       const update = async () => { const d = await api('/admin/twin'); if (routeVersion !== version) return; $('#twin-content').innerHTML = twin(d); };
@@ -169,5 +169,10 @@ function syncDemoViews() {
 }
 window.addEventListener('storage', event => { if (window.EcoDemo && [window.EcoDemo.key, window.EcoDemo.modeKey].includes(event.key)) syncDemoViews(); });
 window.addEventListener('ecosync-demo-change', syncDemoViews);
+window.addEventListener('message', event => {
+  if (event.origin !== location.origin || event.data?.type !== 'ecosync-twin-size') return;
+  const frame = $('#twin-frame');
+  if (frame && event.source === frame.contentWindow && Number.isFinite(event.data.height)) frame.style.height = Math.max(700, Math.min(10000, event.data.height)) + 'px';
+});
 window.addEventListener('hashchange', render);
 api('/me').then(me => { user = me; }).catch(e => { if (e.status !== 401) notice(e.message); }).finally(render);

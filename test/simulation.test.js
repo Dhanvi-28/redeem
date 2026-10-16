@@ -5,11 +5,11 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('../public/simulation.js', import.meta.url), 'utf8');
 function twin(storage = new Map(), delay = false) {
-  const elements = new Map(), products = [], timers = [];
+  const elements = new Map(), products = [], timers = [], modes = [], stages = [];
   const element = id => {
     if (!elements.has(id)) {
       const classes = new Set();
-      elements.set(id, { textContent: '', value: id === 'weightInput' ? '250' : id === 'wasteType' ? 'pet' : '', disabled: false, style: {}, focus() {},
+      elements.set(id, { textContent: '', value: id === 'weightInput' ? '250' : id === 'wasteType' ? 'pet' : '', disabled: false, style: { setProperty(name, value) { this[name] = value; } }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, focus() {},
         classList: { add: c => classes.add(c), remove: c => classes.delete(c), toggle(c, on) { if (on) classes.add(c); else classes.delete(c); }, contains: c => classes.has(c) },
         set innerHTML(value) {
           this.html = value;
@@ -19,15 +19,17 @@ function twin(storage = new Map(), delay = false) {
     }
     return elements.get(id);
   };
+  for (const mode of ['both', 'waste', 'vending', 'inside']) { const button = element('mode-' + mode); button.dataset = { mode }; modes.push(button); }
+  for (const stage of ['identify', 'inspect', 'weigh', 'sort', 'credit', 'vend']) { const button = element('explain-' + stage); button.dataset = { explain: stage }; stages.push(button); }
   let nextId = 0;
-  const context = vm.createContext({ document: { getElementById: element, querySelectorAll: selector => selector === '.product' ? products : [], addEventListener() {} },
+  const context = vm.createContext({ document: { getElementById: element, querySelectorAll: selector => selector === '.product' ? products : selector === '.mode-btn' ? modes : selector === '[data-explain]' ? stages : [], addEventListener() {} },
     window: { addEventListener() {}, dispatchEvent() {} }, Event, URLSearchParams,
     localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
     crypto: { randomUUID: () => 'fixture-' + ++nextId }, setTimeout: fn => { if (delay) timers.push(fn); else queueMicrotask(fn); }, setInterval() {},
   });
   vm.runInContext(readFileSync(new URL('../public/demo-store.js', import.meta.url), 'utf8'), context);
   vm.runInContext(source, context);
-  return { element, products, storage, timers, state: () => JSON.parse(vm.runInContext('JSON.stringify(state)', context)) };
+  return { element, products, modes, stages, storage, timers, state: () => JSON.parse(vm.runInContext('JSON.stringify(state)', context)) };
 }
 
 test('completed deposits, pending choices, balances and stock survive leaving/reopening the twin', async () => {
@@ -67,4 +69,40 @@ test('corrupt or unavailable browser storage does not break the twin', () => {
   const storage = new Map([['ecosync:twin:v2', '{invalid']]); assert.equal(twin(storage).state().balance, 0);
   const inaccessible = { get() { throw Error('storage denied'); }, set() { throw Error('storage denied'); } };
   const app = twin(inaccessible); assert.match(app.element('storageNotice').textContent, /unavailable/);
+});
+
+test('Inside view follows an actual deposit and explains the exact credited points', async () => {
+  const app = twin(new Map(), true);
+  app.modes.find(button => button.dataset.mode === 'inside').onclick();
+  assert.equal(app.element('inside-view').hidden, false); assert.equal(app.element('exterior-view').hidden, true);
+  app.element('weightInput').value = '1000';
+  const running = app.element('runBtn').onclick();
+  assert.equal(app.element('inside-view').attributes['data-stage'], 'identify');
+  assert.ok(app.stages.every(button => button.disabled));
+  for (const stage of ['inspect', 'weigh', 'sort']) {
+    const next = app.timers.shift(); next(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(app.element('inside-view').attributes['data-stage'], stage);
+  }
+  app.timers.shift()(); await running;
+  assert.equal(app.element('inside-view').attributes['data-stage'], 'credit');
+  assert.equal(app.element('formula-result').textContent, '80 pts');
+  assert.equal(app.element('calculation-state').textContent, 'CREDIT RECORDED');
+  assert.equal(app.element('inside-wallet').textContent, '80 pts');
+  assert.match(app.element('inside-bins').innerHTML, /1000 g accepted/);
+  assert.ok(app.stages.every(button => !button.disabled));
+});
+
+test('manual internal explanations never credit or redeem; reset clears the formula wallet', async () => {
+  const app = twin();
+  for (const button of app.stages) button.onclick();
+  assert.equal(app.state().balance, 0); assert.equal(app.state().count, 0); assert.equal(app.state().redemptions.length, 0);
+  assert.equal(app.element('calculation-state').textContent, 'ESTIMATE · NOT CREDITED');
+  app.element('weightInput').value = '1000'; await app.element('runBtn').onclick();
+  app.element('walletRewards').onclick(); app.products[0].onclick(); app.element('confirmRedeem').onclick();
+  assert.equal(app.element('inside-view').attributes['data-stage'], 'vend');
+  assert.equal(app.element('engine-earned').textContent, 80); assert.equal(app.element('engine-spent').textContent, 80);
+  assert.equal(app.element('engine-balance').textContent, 0);
+  app.element('resetBtn').onclick();
+  assert.equal(app.element('inside-view').attributes['data-stage'], 'idle');
+  assert.equal(app.element('engine-earned').textContent, 0); assert.equal(app.element('engine-spent').textContent, 0);
 });
