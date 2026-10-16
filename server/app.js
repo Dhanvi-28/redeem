@@ -27,6 +27,8 @@ export function createApp({ db, client, config }) {
   const crypto = identityCrypto(config.identityKey);
   const origin = new URL(config.frontendUrl).origin;
   app.disable('x-powered-by');
+  // Trust only the configured number of ingress proxies for client IP rate limits.
+  app.set('trust proxy', config.trustProxy ?? 0);
   app.use(helmet({ contentSecurityPolicy: { directives: { 'img-src': ["'self'", 'data:', 'blob:'], 'script-src': ["'self'"], 'style-src': ["'self'"], 'connect-src': ["'self'"] } } }));
   app.use(express.json({ limit: '8mb' }));
   app.use(cookieParser());
