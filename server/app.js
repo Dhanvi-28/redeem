@@ -105,16 +105,16 @@ export function createApp({ db, client, config }) {
     const userId = req.user._id;
     const [wallet, deposits, redemptions, summary] = await Promise.all([
       c('wallets').findOne({ userId }, { projection: { _id: 0, userId: 0 } }),
-      c('deposits').find({ userId }).sort({ createdAt: -1 }).limit(10).toArray(),
-      c('redemptions').find({ userId }).sort({ createdAt: -1 }).limit(10).toArray(),
+      c('deposits').find({ userId }).sort({ createdAt: -1, _id: -1 }).limit(10).toArray(),
+      c('redemptions').find({ userId }).sort({ createdAt: -1, _id: -1 }).limit(10).toArray(),
       c('deposits').aggregate([{ $match: { userId } }, { $group: { _id: null, count: { $sum: 1 }, weightGrams: { $sum: '$weightGrams' } } }]).next(),
     ]);
     res.json({ wallet, deposits: deposits.map(cleanDeposit), redemptions: redemptions.map(cleanRedemption), depositCount: summary?.count || 0, weightGrams: summary?.weightGrams || 0 });
   });
   const page = req => Math.max(0, Math.min(100000, Number.parseInt(req.query.offset, 10) || 0));
-  app.get('/api/wallet', auth, async (req, res) => res.json({ wallet: await c('wallets').findOne({ userId: req.user._id }, { projection: { _id: 0, userId: 0 } }), transactions: await c('walletTransactions').find({ userId: req.user._id }, { projection: { key: 0, userId: 0 } }).sort({ createdAt: -1 }).skip(page(req)).limit(50).toArray() }));
-  app.get('/api/deposits', auth, async (req, res) => res.json((await c('deposits').find({ userId: req.user._id }).sort({ createdAt: -1 }).skip(page(req)).limit(50).toArray()).map(cleanDeposit)));
-  app.get('/api/redemptions', auth, async (req, res) => res.json((await c('redemptions').find({ userId: req.user._id }).sort({ createdAt: -1 }).skip(page(req)).limit(50).toArray()).map(cleanRedemption)));
+  app.get('/api/wallet', auth, async (req, res) => res.json({ wallet: await c('wallets').findOne({ userId: req.user._id }, { projection: { _id: 0, userId: 0 } }), transactions: await c('walletTransactions').find({ userId: req.user._id }, { projection: { key: 0, userId: 0 } }).sort({ createdAt: -1, _id: -1 }).skip(page(req)).limit(50).toArray() }));
+  app.get('/api/deposits', auth, async (req, res) => res.json((await c('deposits').find({ userId: req.user._id }).sort({ createdAt: -1, _id: -1 }).skip(page(req)).limit(50).toArray()).map(cleanDeposit)));
+  app.get('/api/redemptions', auth, async (req, res) => res.json((await c('redemptions').find({ userId: req.user._id }).sort({ createdAt: -1, _id: -1 }).skip(page(req)).limit(50).toArray()).map(cleanRedemption)));
   app.get('/api/rewards', auth, async (req, res) => res.json(await c('rewards').find({ active: true }).sort({ name: 1 }).limit(200).toArray()));
   app.post('/api/rewards/redeem', limit(60000, config.test ? 10000 : 20), auth, async (req, res) => {
     const input = parse(z.object({ rewardId: text }).strict(), req.body), key = parse(eventId, req.get('idempotency-key'));
@@ -206,7 +206,7 @@ export function createApp({ db, client, config }) {
   app.get('/api/admin/twin', async (req, res) => {
     const [machines, events, inventory, pending] = await Promise.all([
       c('machines').find().limit(200).toArray(),
-      c('machineEvents').find({}, { projection: { fingerprint: 0 } }).sort({ createdAt: -1 }).limit(50).toArray(),
+      c('machineEvents').find({}, { projection: { fingerprint: 0 } }).sort({ createdAt: -1, _id: -1 }).limit(50).toArray(),
       c('rewards').find({ machineId: { $ne: null } }, { projection: { name: 1, machineId: 1, stock: 1, active: 1, pointsPrice: 1 } }).limit(200).toArray(),
       c('redemptions').aggregate([{ $match: { machineId: { $ne: null }, status: 'awaiting_dispense' } }, { $group: { _id: '$machineId', count: { $sum: 1 } } }]).toArray(),
     ]);

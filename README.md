@@ -6,9 +6,11 @@ The original simulation is preserved at `/simulation.html`, isolated from applic
 
 ## Challenge digital twin — no hardware required
 
-Open **Digital Twin** in the main navigation, or visit `http://localhost:3000/#twin`. It is available without login. The embedded interactive model runs both units: choose a material and weight, watch identification/classification/weighing/sorting stages, and choose Save to wallet or Redeem now. Simulated balances, product stock and event history update together. Use Reset to start again, or Open full view for more space. Reloading the page starts a new demo.
+Open **Digital Twin** in the main navigation, or visit `http://localhost:3000/#twin`. It is available without login. The embedded interactive model runs both units: choose a material and weight, watch identification/classification/weighing/sorting stages, and choose Save to wallet or Redeem now. The demo starts at zero points. Completed deposits, the ledger, wallet, inventory and pending save/redeem choice persist in browser local storage across navigation and reloads. Accepted deposits earn credit before the optional redemption choice. Use Reset to clear this demo, or Open full view for more space. Clearing site data also removes the demo; storage failures are disclosed. Leaving during an unfinished animation does not complete or credit that deposit.
 
-This explicitly labelled simulation needs no physical hardware, AI endpoint or controller credentials. Its illustrative wallet and inventory stay separate from MongoDB citizen records. The future controller-backed twin remains available to administrators under **Controller Status** (`#machine-status`); the challenge presentation uses the interactive twin by default.
+This explicitly labelled simulation needs no physical hardware, AI endpoint or controller credentials. Its illustrative wallet and inventory stay separate from MongoDB citizen records. Verified Recycling History therefore excludes simulation deposits and links back to the saved twin ledger. The controller-backed twin remains available to administrators under **Controller Status** (`#machine-status`); the challenge presentation uses the interactive twin by default.
+
+Eight illustrative streams are available: PET, aluminium, paper/cardboard, glass, HDPE, steel/tin, beverage cartons and clean textiles. These do not configure physical controller acceptance rules. Each selection shows its demo rate and minimum earning weight. Only whole-number weights from 1 to 5,000 grams earning at least one calculated point are accepted; no minimum point is invented. Unaffordable and exhausted rewards are disabled, with the exact points shortfall displayed. Saved points can be spent through **Browse demo rewards** without another deposit. The demo is shared by tabs in the same browser profile; another open twin refreshes when its saved state changes.
 
 ## Local setup
 
@@ -49,6 +51,10 @@ npm run check
 npm test
 npm audit
 ```
+
+If a broken global npm launcher reports missing `npm-cli.js`, repair the Node/npm installation or use the npm executable bundled with Node. Tests can also run directly with `node --test --test-concurrency=1 test/*.test.js`.
+
+Frontend regression tests cover saved twin state, material/weight limits, insufficient points, inventory, reset during animations, unavailable storage, camera capture/denial/cleanup, invalid uploads and navigation races.
 
 Integration tests launch an isolated MongoDB replica set on port 27119, use database `ecosync_test` in `.local/tests/run-*`, and stop it afterward. Fixtures never enter the application database. Tests cover QR uniqueness/persistence, authentication, account isolation, empty accounts, missing AI, acceptance rules, duplicate/concurrent deposits, overspending/overselling, retry-safe redemption, save/redeem sessions, failed/successful dispensing, telemetry freshness and wallet/ledger reconciliation. `mongod` must be installed. Restricted automation hosts may require local socket/child-process permission.
 
@@ -118,7 +124,9 @@ Telemetry timestamps are compared as instants, including when controllers use di
 
 Set `AI_MODEL_ENDPOINT` and optional `AI_MODEL_KEY` in `.env`, then restart. Only the backend calls the configured endpoint. It sends `{ image: "<base64 bytes without data URL prefix>", mimeType: "image/jpeg|image/png|image/webp" }`, with optional Bearer authorization. Images are limited to 5 MB decoded and checked for matching file signatures. Timeout is 20 seconds.
 
-The service must return `{ category: string, modelVersion: string, confidence?: number, guidance?: string[] }`. Confidence is 0–1; guidance must come from its configured model/ruleset. No prediction or guidance fallback is fabricated. Images stay in application memory and are not retained here; configure classifier-side retention separately. Photo scans always return zero points. Without an endpoint the UI/API say **AI classification is not configured**. Camera capture uses the device's supported camera/file chooser with upload fallback.
+The service must return `{ category: string, modelVersion: string, confidence?: number, guidance?: string[] }`. Confidence is 0–1; guidance must come from its configured model/ruleset. No prediction or guidance fallback is fabricated. Images stay in application memory and are not retained here; configure classifier-side retention separately. Photo scans always return zero points. Without an endpoint the UI/API say **AI classification is not configured**.
+
+**Use camera** opens a live `getUserMedia` preview with **Take photo** and **Stop camera** controls. It requires HTTPS (or localhost), a supported browser, a camera and camera permission. Permission denial, absent devices and unsupported browsers show useful guidance; file upload remains a separate option. Capture and navigation both stop camera tracks. Late permission responses after navigation cannot leave a camera running. Preview URLs are released when replaced or when leaving the page. Classification remains disabled until a valid image and classifier are available.
 
 ## Website and operations APIs
 

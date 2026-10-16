@@ -1,10 +1,131 @@
-
-const rates={pet:.08,can:.12,paper:.04},labels={pet:'PET bottle',can:'Aluminium can',paper:'Paper / cardboard'},emojis={pet:'🧴',can:'🥫',paper:'📦'},bins={pet:'PET',can:'AL',paper:'PAP'};const catalog=[{name:'Instant noodles',emoji:'🍜',cost:80,stock:4},{name:'Snack pack',emoji:'🥨',cost:60,stock:6},{name:'Biscuit pack',emoji:'🍪',cost:50,stock:5},{name:'Juice box',emoji:'🧃',cost:70,stock:3}];let state={balance:120,waste:0,points:0,count:0,ledger:[],activity:[],step:0,pending:null,mode:'both',selected:null};const stepData=[['Identify citizen','QR identity recognized (demo)'],['Inspect item','Camera and classifier evaluate waste'],['Measure weight','Sensor settles and validates weight'],['Sort & credit','Eligible waste routed; points calculated'],['Choose outcome','Redeem at unit or save in wallet']];
-const $=id=>document.getElementById(id);function toast(s){let t=$('toast');t.textContent=s;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}function renderSteps(){ $('steps').innerHTML=stepData.map((s,i)=>'<div class="step '+(i<state.step?'done':i===state.step?'current':'')+'"><div class="step-dot">'+(i<state.step?'✓':i+1)+'</div><div class="step-text"><b>'+s[0]+'</b><small>'+s[1]+'</small></div></div>').join('')}
-function render(){ $('balance').textContent=state.balance;$('wasteMetric').innerHTML=state.waste.toFixed(2)+' <small style="font-size:12px;font-weight:500">kg</small>';$('pointsMetric').textContent=state.points;$('depositMetric').textContent=state.count;$('walletMeter').style.width=Math.min(100,state.balance/5)+'%';$('activityCount').textContent=state.activity.length+' EVENTS';$('activityList').innerHTML=state.activity.length?state.activity.slice(0,3).map(a=>'<div class="activity-row"><div class="activity-left"><div class="activity-icon">'+a.icon+'</div><div>'+a.title+'<small>'+a.detail+'</small></div></div><span class="activity-pts">'+a.delta+'</span></div>').join(''):'<div class="empty">Your simulated transactions will appear here.</div>';$('ledger').innerHTML=state.ledger.length?state.ledger.map(x=>'<tr><td style="font-family:DM Mono,monospace">'+x.id+'</td><td>'+x.emoji+' '+x.name+'</td><td>'+x.grams+' g</td><td style="color:var(--green);font-weight:700">+'+x.points+' pts</td><td><span class="pill">'+x.status+'</span></td></tr>').join(''):'<tr><td class="empty" colspan="5">No deposits yet. Start a simulation above.</td></tr>';renderSteps()}
-function setStep(n){state.step=n;renderSteps()}function enableChoices(on){$('choices').classList.toggle('hidden',!on);$('runBtn').classList.toggle('hidden',on)}function wait(ms){return new Promise(r=>setTimeout(r,ms))}
-async function runDeposit(){let key=$('wasteType').value,grams=Number($('weightInput').value);if(!Number.isFinite(grams)||grams<1||grams>5000){toast('Enter a weight between 1 and 5,000 grams.');return}if(state.pending){toast('Finish or reset the current deposit first.');return}const pending={key,grams};state.pending=pending;$('runBtn').disabled=true;$('wasteType').disabled=true;$('weightInput').disabled=true;$('wasteItem').textContent=emojis[key];const updates=[['IDENTIFYING · DEMO','QR identity recognized','Account RG-••••-4821'],['CLASSIFYING · DEMO',labels[key], 'Demo ruleset · illustrative match'],['WEIGHING · DEMO',grams+' grams','Sensor stable · simulated reading'],['SORTING · DEMO',bins[key]+' compartment','Reward calculated from demo rate']];for(let i=0;i<4;i++){setStep(i);$('wasteScreenTitle').textContent=updates[i][0];$('wasteScreenBig').textContent=updates[i][1];$('wasteScreenSmall').textContent=updates[i][2];if(i===1)$('wasteItem').style.transform='translateY(-5px) rotate(-8deg)';await wait(780);if(state.pending!==pending)return}let pts=Math.floor(grams*rates[key]);if(pts===0){toast('This sample earns 0 points at the configured demo rate.');pts=1}state.pending.points=pts;state.pending.id='DEMO-'+crypto.randomUUID();$('wasteScreenTitle').textContent='DEPOSIT ACCEPTED · DEMO';$('wasteScreenBig').textContent='+'+pts+' points';$('wasteScreenSmall').textContent=grams+' g · '+labels[key];$('vendScreenTitle').textContent='REDEMPTION · AVAILABLE';$('vendScreenBig').textContent='Choose a reward';$('vendScreenSmall').textContent='Balance after credit: '+(state.balance+pts)+' pts';setStep(4);enableChoices(true);$('runBtn').disabled=false}
-function credit(save){let p=state.pending;if(!p)return;state.balance+=p.points;state.points+=p.points;state.waste+=p.grams/1000;state.count++;let obj={id:p.id,name:labels[p.key],emoji:emojis[p.key],grams:p.grams,points:p.points,status:save?'SAVED':'REDEEM FLOW'};state.ledger.unshift(obj);state.activity.unshift({icon:emojis[p.key],title:'Deposit · '+labels[p.key],detail:p.grams+' g · '+(save?'saved to wallet':'ready to redeem'),delta:'+'+p.points});state.pending.credited=true;state.pending=null;$('wasteScreenTitle').textContent='READY · SCAN ID';$('wasteScreenBig').textContent=save?'Points saved ✓':'Deposit credited ✓';$('wasteScreenSmall').textContent='Next deposit session ready';$('vendScreenTitle').textContent='REDEMPTION · STANDBY';$('vendScreenBig').textContent='Choose a reward';$('vendScreenSmall').textContent='Shared wallet · '+state.balance+' pts';$('wasteItem').style.transform='';enableChoices(false);$('wasteType').disabled=false;$('weightInput').disabled=false;$('runBtn').disabled=false;$('runBtn').textContent='Start another deposit →';state.step=0;render();toast(save?'Points saved to the demo wallet.':'Deposit credited. Choose a product.');}
-function openRewards(){if(!state.pending)return;let projected=state.balance+state.pending.points;state.selected=null;$('confirmRedeem').disabled=true;$('confirmRedeem').textContent='Choose a reward';$('products').innerHTML=catalog.map((p,i)=>'<div class="product" data-i="'+i+'"><span class="emoji">'+p.emoji+'</span><span class="product-info"><b>'+p.name+'</b><small>'+p.stock+' simulated in stock</small></span><span class="product-price">'+p.cost+' pts</span></div>').join('');document.querySelectorAll('.product').forEach(el=>el.onclick=()=>{let i=Number(el.dataset.i),p=catalog[i];if(p.stock<=0){toast('This demo reward is out of stock.');return}if(p.cost>projected){toast('This reward needs '+p.cost+' points; projected balance is '+projected+'.');return}state.selected=i;document.querySelectorAll('.product').forEach(e=>e.classList.remove('selected'));el.classList.add('selected');$('confirmRedeem').disabled=false;$('confirmRedeem').textContent='Redeem · '+p.cost+' pts'});$('modal').classList.add('show')}
-$('runBtn').onclick=runDeposit;$('saveBtn').onclick=()=>credit(true);$('redeemBtn').onclick=openRewards;$('cancelModal').onclick=()=>$('modal').classList.remove('show');$('modal').onclick=e=>{if(e.target===$('modal'))$('modal').classList.remove('show')};$('confirmRedeem').onclick=()=>{if(state.selected===null)return;let p=catalog[state.selected],pending=state.pending;if(!pending)return;if(p.stock<=0){toast('This demo reward is out of stock.');return}if(p.cost>state.balance+pending.points){toast('Not enough points.');return}state.balance+=pending.points;state.points+=pending.points;state.waste+=pending.grams/1000;state.count++;state.balance-=p.cost;p.stock--;state.ledger.unshift({id:pending.id,name:labels[pending.key],emoji:emojis[pending.key],grams:pending.grams,points:pending.points,status:'REDEEMED'});state.activity.unshift({icon:p.emoji,title:'Reward · '+p.name,detail:'Authorized demo vend · '+p.cost+' pts',delta:'−'+p.cost});state.activity.unshift({icon:emojis[pending.key],title:'Deposit · '+labels[pending.key],detail:pending.grams+' g · credited',delta:'+'+pending.points});$('modal').classList.remove('show');state.pending=null;$('vendScreenTitle').textContent='VEND COMPLETE · DEMO';$('vendScreenBig').textContent=p.emoji+' '+p.name;$('vendScreenSmall').textContent='Authorized · −'+p.cost+' pts · simulated vend';$('wasteScreenTitle').textContent='REDEMPTION COMPLETE';$('wasteScreenBig').textContent='Enjoy your reward';$('wasteScreenSmall').textContent='Deposit and vend recorded';enableChoices(false);$('wasteType').disabled=false;$('weightInput').disabled=false;$('runBtn').disabled=false;$('runBtn').textContent='Start another deposit →';state.step=0;render();toast(p.name+' redeemed. Demo inventory updated.')};$('resetBtn').onclick=()=>{$('modal').classList.remove('show');$('confirmRedeem').disabled=true;$('runBtn').disabled=false;state={balance:120,waste:0,points:0,count:0,ledger:[],activity:[],step:0,pending:null,mode:state.mode,selected:null};catalog.forEach((p,i)=>p.stock=[4,6,5,3][i]);$('wasteScreenTitle').textContent='READY · SCAN ID';$('wasteScreenBig').textContent='Place item to begin';$('wasteScreenSmall').textContent='Camera · weight · classifier';$('vendScreenTitle').textContent='REDEMPTION · STANDBY';$('vendScreenBig').textContent='Choose a reward';$('vendScreenSmall').textContent='Shared wallet · 120 pts';$('wasteType').disabled=false;$('weightInput').disabled=false;$('wasteItem').style.transform='';$('runBtn').textContent='Start deposit simulation →';enableChoices(false);render();toast('Demo state reset.')};document.querySelectorAll('.mode-btn').forEach(b=>b.onclick=()=>{document.querySelectorAll('.mode-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.mode=b.dataset.mode;let s=$('scene');s.classList.remove('only-waste','only-vending');if(state.mode==='waste')s.classList.add('only-waste');if(state.mode==='vending')s.classList.add('only-vending')});
-const modeCss=document.createElement('style');modeCss.textContent='.machine-scene:has(.only-waste){}#scene.only-waste .vending,#scene.only-vending .waste-unit{opacity:.18;filter:grayscale(1)}#scene.only-waste .gap-arrow,#scene.only-vending .gap-arrow{opacity:.15}';document.head.append(modeCss);function tick(){let d=new Date();$('clock').textContent=d.toLocaleTimeString([],{hour12:false})}tick();setInterval(tick,1000);render();
+// Browser-only demo. Never writes to account wallets or controller APIs.
+const materials = {
+  pet: ['PET bottle', '🧴', 'PET', .08], can: ['Aluminium can', '🥫', 'AL', .12],
+  paper: ['Paper / cardboard', '📦', 'PAP', .04], glass: ['Glass bottle / jar', '🍾', 'GLASS', .03],
+  hdpe: ['HDPE container', '🧴', 'HDPE', .07], steel: ['Steel / tin can', '🥫', 'STEEL', .06],
+  cartons: ['Beverage carton', '🧃', 'CARTON', .04], textiles: ['Clean textiles', '👕', 'TEXTILE', .02],
+};
+const catalog = [{ name: 'Instant noodles', emoji: '🍜', cost: 80, stock: 4 }, { name: 'Snack pack', emoji: '🥨', cost: 60, stock: 6 }, { name: 'Biscuit pack', emoji: '🍪', cost: 50, stock: 5 }, { name: 'Juice box', emoji: '🧃', cost: 70, stock: 3 }];
+const initialStock = catalog.map(p => p.stock), storageKey = 'ecosync:twin:v2';
+const fresh = () => ({ balance: 0, waste: 0, points: 0, count: 0, ledger: [], activity: [], step: 0, pending: null, mode: 'both', selected: null });
+let state = fresh(), busy = false;
+const $ = id => document.getElementById(id);
+const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const integer = n => Number.isSafeInteger(n) && n >= 0;
+try {
+  const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+  if (saved) {
+    const s = saved.state;
+    if (saved.version !== 2 || !s || ![s.balance, s.points, s.count].every(integer) || !Number.isFinite(s.waste) || s.waste < 0 || !Array.isArray(s.ledger) || !Array.isArray(s.activity) || !s.ledger.every(row => row && typeof row.id === 'string' && integer(row.points) && integer(row.grams)) || !s.activity.every(row => row && typeof row.title === 'string') || !Array.isArray(saved.stock) || saved.stock.length !== catalog.length || !saved.stock.every(integer)) throw new Error('Invalid demo state');
+    state = { ...fresh(), ...s, selected: null };
+    if (!['both', 'waste', 'vending'].includes(state.mode)) state.mode = 'both';
+    const p = state.pending;
+    if (p && (!materials[p.key] || !integer(p.grams) || p.grams < 1 || p.grams > 5000 || !integer(p.points) || p.points < 1 || p.points !== Math.floor(p.grams * materials[p.key][3]) || typeof p.id !== 'string')) state.pending = null;
+    catalog.forEach((p, i) => p.stock = saved.stock[i]);
+  }
+} catch { state = fresh(); }
+function persist() {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify({ version: 2, state, stock: catalog.map(p => p.stock) }));
+    $('storageNotice').textContent = 'Demo history, wallet and inventory are saved in this browser when you leave or reload. Reset clears only the demo. Verified account history is separate.';
+  } catch { $('storageNotice').textContent = 'Browser storage is unavailable or full. Further changes cannot be saved after leaving this page.'; }
+}
+const steps = [['Identify citizen', 'QR identity recognized (demo)'], ['Inspect item', 'Illustrative material ruleset'], ['Measure weight', 'Validate simulated weight'], ['Sort & credit', 'Calculate demo points'], ['Choose outcome', 'Save points or redeem']];
+function toast(message) { $('toast').textContent = message; $('toast').classList.add('show'); setTimeout(() => $('toast').classList.remove('show'), 4000); }
+function renderSteps() { $('steps').innerHTML = steps.map((s, i) => `<div class="step ${i < state.step ? 'done' : i === state.step ? 'current' : ''}"><div class="step-dot">${i < state.step ? '✓' : i + 1}</div><div class="step-text"><b>${s[0]}</b><small>${s[1]}</small></div></div>`).join(''); }
+function render() {
+  $('balance').textContent = state.balance; $('wasteMetric').textContent = state.waste.toFixed(2) + ' kg';
+  $('pointsMetric').textContent = state.points; $('depositMetric').textContent = state.count;
+  $('walletMeter').style.width = Math.min(100, state.balance / 5) + '%'; $('activityCount').textContent = state.activity.length + ' EVENTS';
+  $('activityList').innerHTML = state.activity.length ? state.activity.slice(0, 3).map(a => `<div class="activity-row"><div class="activity-left"><div class="activity-icon">${escape(a.icon)}</div><div>${escape(a.title)}<small>${escape(a.detail)}</small></div></div><span class="activity-pts">${escape(a.delta)}</span></div>`).join('') : '<div class="empty">Your simulated transactions will appear here.</div>';
+  $('ledger').innerHTML = state.ledger.length ? state.ledger.map(x => `<tr><td>${escape(x.id)}</td><td>${escape(x.emoji)} ${escape(x.name)}</td><td>${escape(x.grams)} g</td><td>+${escape(x.points)} pts</td><td><span class="pill">${escape(x.status)}</span></td></tr>`).join('') : '<tr><td class="empty" colspan="5">No deposits yet. Start a simulation above.</td></tr>';
+  renderSteps(); persist();
+}
+function enableChoices(on) { $('choices').classList.toggle('hidden', !on); $('runBtn').classList.toggle('hidden', on); }
+function inputs(disabled) { $('wasteType').disabled = $('weightInput').disabled = disabled; }
+function quote() {
+  const m = materials[$('wasteType').value], grams = Number($('weightInput').value);
+  if (m) $('selectedBin').textContent = m[2];
+  $('depositLimit').textContent = m ? `Demo rate: ${m[3] * 1000} pts/kg · minimum ${Math.ceil(1 / m[3])} g for 1 point · maximum 5,000 g. ${Number.isInteger(grams) && grams > 0 && grams <= 5000 ? 'Estimated reward: ' + Math.floor(grams * m[3]) + ' pts.' : 'Enter a whole-number weight within the limit.'}` : 'Choose a supported material.';
+}
+function ready() {
+  inputs(false); enableChoices(false); $('runBtn').disabled = false; $('wasteItem').style.transform = '';
+  $('wasteScreenTitle').textContent = 'READY · SCAN ID'; $('wasteScreenBig').textContent = 'Place item to begin';
+  $('wasteScreenSmall').textContent = 'Illustrative rules · no hardware'; $('vendScreenTitle').textContent = 'REDEMPTION · STANDBY';
+  $('vendScreenBig').textContent = 'Choose a reward'; $('vendScreenSmall').textContent = 'Shared demo wallet · ' + state.balance + ' pts';
+}
+function showPending() {
+  const p = state.pending; inputs(true); enableChoices(true); state.step = 4;
+  $('wasteScreenTitle').textContent = 'DEPOSIT ACCEPTED · DEMO'; $('wasteScreenBig').textContent = '+' + p.points + ' points';
+  $('wasteScreenSmall').textContent = p.grams + ' g · ' + materials[p.key][0]; $('wasteItem').textContent = materials[p.key][1];
+  $('vendScreenSmall').textContent = 'Available demo balance: ' + state.balance + ' pts';
+  $('wasteType').value = p.key; $('weightInput').value = p.grams;
+}
+async function runDeposit() {
+  if (busy || state.pending) return toast('Finish or reset the current deposit first.');
+  const key = $('wasteType').value, grams = Number($('weightInput').value), m = materials[key];
+  if (!m || !Number.isInteger(grams) || grams < 1 || grams > 5000) return toast('Choose a supported material and a whole-number weight from 1 to 5,000 grams.');
+  const points = Math.floor(grams * m[3]);
+  if (points < 1) return toast(`This sample earns 0 points. Use at least ${Math.ceil(1 / m[3])} grams of ${m[0]}.`);
+  const operation = {}; busy = operation; inputs(true); $('runBtn').disabled = true; $('wasteItem').textContent = m[1];
+  const updates = [['IDENTIFYING · DEMO', 'QR identity recognized'], ['CLASSIFYING · DEMO', m[0]], ['WEIGHING · DEMO', grams + ' grams'], ['SORTING · DEMO', m[2] + ' compartment']];
+  for (let i = 0; i < updates.length; i++) {
+    state.step = i; renderSteps(); $('wasteScreenTitle').textContent = updates[i][0]; $('wasteScreenBig').textContent = updates[i][1];
+    await new Promise(resolve => setTimeout(resolve, 780)); if (busy !== operation) return;
+  }
+  // A completed deposit earns credit before the optional redemption choice.
+  const id = 'DEMO-' + crypto.randomUUID(); state.pending = { key, grams, points, id };
+  state.balance += points; state.points += points; state.waste += grams / 1000; state.count++;
+  state.ledger.unshift({ id, name: m[0], emoji: m[1], grams, points, status: 'SAVED · CHOICE OPEN' });
+  state.activity.unshift({ icon: m[1], title: 'Deposit · ' + m[0], detail: grams + ' g · credited to demo wallet', delta: '+' + points });
+  busy = false; showPending(); render();
+}
+function credit() {
+  if (!state.pending) return;
+  const row = state.ledger.find(x => x.id === state.pending.id); if (row) row.status = 'SAVED';
+  state.pending = null; state.step = 0; ready(); render(); toast('Points saved to the demo wallet.');
+}
+function openRewards() {
+  if (busy) return toast('Wait for the deposit to finish.');
+  state.selected = null; $('confirmRedeem').disabled = true; $('confirmRedeem').textContent = 'Choose a reward';
+  $('rewardBalance').textContent = state.balance + ' demo points available. Unaffordable and out-of-stock rewards cannot be selected.';
+  $('products').innerHTML = catalog.map((p, i) => `<button type="button" class="product" data-i="${i}" ${p.stock <= 0 || p.cost > state.balance ? 'disabled' : ''}><span class="emoji">${p.emoji}</span><span class="product-info"><b>${p.name}</b><small>${p.stock <= 0 ? 'Out of stock' : p.cost > state.balance ? 'Need ' + (p.cost - state.balance) + ' more points · ' + p.stock + ' in stock' : p.stock + ' simulated in stock'}</small></span><span class="product-price">${p.cost} pts</span></button>`).join('');
+  document.querySelectorAll('.product').forEach(el => el.onclick = () => {
+    const i = Number(el.dataset.i), p = catalog[i]; if (p.stock <= 0 || p.cost > state.balance) return;
+    state.selected = i; document.querySelectorAll('.product').forEach(e => e.classList.remove('selected')); el.classList.add('selected');
+    $('confirmRedeem').disabled = false; $('confirmRedeem').textContent = 'Redeem · ' + p.cost + ' pts';
+  });
+  $('modal').classList.add('show'); $('cancelModal').focus();
+}
+function closeRewards() { $('modal').classList.remove('show'); state.selected = null; }
+$('runBtn').onclick = runDeposit; $('saveBtn').onclick = credit; $('redeemBtn').onclick = openRewards; $('walletRewards').onclick = openRewards;
+$('cancelModal').onclick = closeRewards; $('modal').onclick = e => { if (e.target === $('modal')) closeRewards(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRewards(); });
+$('confirmRedeem').onclick = () => {
+  if (state.selected === null) return; const p = catalog[state.selected];
+  if (p.stock <= 0) return toast('This demo reward is out of stock.');
+  if (p.cost > state.balance) return toast('Need ' + (p.cost - state.balance) + ' more points.');
+  state.balance -= p.cost; p.stock--;
+  if (state.pending) { const row = state.ledger.find(x => x.id === state.pending.id); if (row) row.status = 'REDEEMED'; }
+  state.activity.unshift({ icon: p.emoji, title: 'Reward · ' + p.name, detail: 'Simulated vend · ' + p.cost + ' pts', delta: '−' + p.cost });
+  state.pending = null; state.step = 0; closeRewards(); ready();
+  $('vendScreenTitle').textContent = 'VEND COMPLETE · DEMO'; $('vendScreenBig').textContent = p.emoji + ' ' + p.name;
+  render(); toast(p.name + ' redeemed. Demo inventory updated.');
+};
+$('resetBtn').onclick = () => {
+  busy = false; closeRewards(); const mode = state.mode; state = fresh(); state.mode = mode;
+  catalog.forEach((p, i) => p.stock = initialStock[i]); ready(); render(); quote(); toast('Demo history, wallet and inventory reset.');
+};
+function setMode(mode) {
+  state.mode = mode; document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  $('scene').classList.toggle('only-waste', mode === 'waste'); $('scene').classList.toggle('only-vending', mode === 'vending'); persist();
+}
+document.querySelectorAll('.mode-btn').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+$('wasteType').innerHTML = Object.entries(materials).map(([key, m]) => `<option value="${key}">${m[0]}</option>`).join('');
+$('wasteType').onchange = quote; $('weightInput').oninput = quote;
+window.addEventListener('storage', event => {
+  if (event.key === storageKey && event.newValue !== JSON.stringify({ version: 2, state, stock: catalog.map(p => p.stock) })) location.reload();
+});
+function tick() { $('clock').textContent = new Date().toLocaleTimeString([], { hour12: false }); }
+ready(); if (state.pending) showPending(); else state.step = 0;
+setMode(state.mode); quote(); tick(); setInterval(tick, 1000); render();

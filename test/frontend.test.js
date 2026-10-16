@@ -3,6 +3,28 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
+test('a slow page response cannot overwrite a newer navigation', async () => {
+  const elements = new Map(); let changePage, resolveDashboard;
+  const element = selector => {
+    if (!elements.has(selector)) elements.set(selector, { innerHTML: '', setAttribute() {} });
+    return elements.get(selector);
+  };
+  const context = vm.createContext({ document: { querySelector: element }, location: { hash: '#home' },
+    window: { addEventListener(type, fn) { changePage = fn; } },
+    fetch: async path => {
+      if (path === '/api/dashboard') return new Promise(resolve => resolveDashboard = resolve);
+      return { ok: true, json: async () => ({ _id: 'fixture', name: 'Fixture', role: 'citizen' }) };
+    },
+  });
+  vm.runInContext(readFileSync(new URL('../public/app.js', import.meta.url), 'utf8'), context);
+  await new Promise(resolve => setImmediate(resolve));
+  context.location.hash = '#twin'; await changePage();
+  resolveDashboard({ ok: true, json: async () => ({ wallet: { balance: 0, earned: 0 }, deposits: [], redemptions: [], depositCount: 0, weightGrams: 0 }) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(element('#main').innerHTML, /Challenge simulation/);
+  assert.doesNotMatch(element('#main').innerHTML, /Unable to load|Your recycling, recorded/);
+});
+
 test('challenge twin is public, embeds the interactive model and never calls admin machine APIs', async () => {
   const elements = new Map(), calls = [];
   const element = selector => {

@@ -279,3 +279,21 @@ test('twin orders timestamps chronologically across different fractional precisi
   assert.equal(machine.observedAt, fine);
   assert.equal(machine.compartments[0].fillPercent, 20);
 });
+
+test('verified deposit history paginates deterministically and survives a new website session', async () => {
+  // Use real controller ingestion in the isolated test database, including ledger credits.
+  for (let i = 0; i < 51; i++) {
+    const result = await deposit(`history-paging-${i}`);
+    assert.equal(result.response.status, 200);
+  }
+  // Equal timestamps occur with concurrent ingestion; _id provides the tie-breaker.
+  await db.collection('deposits').updateMany({ eventId: /^history-paging-/ }, { $set: { createdAt: new Date('2099-01-01T00:00:00Z') } });
+  const first = (await owner.get('/api/deposits?offset=0').expect(200)).body;
+  const second = (await owner.get('/api/deposits?offset=50').expect(200)).body;
+  assert.equal(first.length, 50);
+  assert.equal(new Set([...first, ...second].map(row => row._id)).size, first.length + second.length);
+  assert.equal([...first, ...second].filter(row => row.eventId.startsWith('history-paging-')).length, 51);
+  const freshSession = request.agent(app);
+  await write(freshSession, '/api/auth/login', { email: 'citizen@test.invalid', password }).expect(200);
+  assert.deepEqual((await freshSession.get('/api/deposits?offset=0').expect(200)).body, first);
+});
