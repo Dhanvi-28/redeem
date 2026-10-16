@@ -1,0 +1,31 @@
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Large dataset folders (avoids committing 25,000 images)
+dataset/
+*.cache
+
+# Training runs and experiment logs
+runs/
+
+# Pretrained base weights (only keep fine-tuned best.pt)
+*.pt
+!best.pt
+
+# Python cache & OS files
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+.idea/
+.vscode/
+
+# Ensure deployment files and weights are tracked
+!app.py
+!requirements.txt
+!packages.txt
+!sample_images/
+!setup_data.py
+!train.py
