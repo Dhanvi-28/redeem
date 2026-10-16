@@ -10,7 +10,7 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "test": "node --test --test-concurrency=1 test/*.test.js",
-    "check": "node --check server/app.js && node --check server/domain.js && node --check public/app.js && node --check public/scanner.js && node --check public/simulation.js",
+    "check": "node --check server/app.js && node --check server/domain.js && node --check public/app.js && node --check public/scanner.js && node --check public/simulation.js && node --check public/demo-store.js",
     "db:local": "node scripts/local-db.js",
     "setup": "node scripts/setup.js",
     "admin": "node scripts/admin.js",

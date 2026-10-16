@@ -5,41 +5,32 @@ const materials = {
   hdpe: ['HDPE container', '🧴', 'HDPE', .07], steel: ['Steel / tin can', '🥫', 'STEEL', .06],
   cartons: ['Beverage carton', '🧃', 'CARTON', .04], textiles: ['Clean textiles', '👕', 'TEXTILE', .02],
 };
-const catalog = [{ name: 'Instant noodles', emoji: '🍜', cost: 80, stock: 4 }, { name: 'Snack pack', emoji: '🥨', cost: 60, stock: 6 }, { name: 'Biscuit pack', emoji: '🍪', cost: 50, stock: 5 }, { name: 'Juice box', emoji: '🧃', cost: 70, stock: 3 }];
-const initialStock = catalog.map(p => p.stock), storageKey = 'ecosync:twin:v2';
-const fresh = () => ({ balance: 0, waste: 0, points: 0, count: 0, ledger: [], activity: [], step: 0, pending: null, mode: 'both', selected: null });
+const demo = window.EcoDemo;
+const catalog = demo.catalog.map(p => ({ ...p })), initialStock = catalog.map(p => p.stock), storageKey = demo.key;
+const fresh = demo.fresh;
 let state = fresh(), busy = false;
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const integer = n => Number.isSafeInteger(n) && n >= 0;
-try {
-  const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
-  if (saved) {
-    const s = saved.state;
-    if (saved.version !== 2 || !s || ![s.balance, s.points, s.count].every(integer) || !Number.isFinite(s.waste) || s.waste < 0 || !Array.isArray(s.ledger) || !Array.isArray(s.activity) || !s.ledger.every(row => row && typeof row.id === 'string' && integer(row.points) && integer(row.grams)) || !s.activity.every(row => row && typeof row.title === 'string') || !Array.isArray(saved.stock) || saved.stock.length !== catalog.length || !saved.stock.every(integer)) throw new Error('Invalid demo state');
-    state = { ...fresh(), ...s, selected: null };
-    if (!['both', 'waste', 'vending'].includes(state.mode)) state.mode = 'both';
-    const p = state.pending;
-    if (p && (!materials[p.key] || !integer(p.grams) || p.grams < 1 || p.grams > 5000 || !integer(p.points) || p.points < 1 || p.points !== Math.floor(p.grams * materials[p.key][3]) || typeof p.id !== 'string')) state.pending = null;
-    catalog.forEach((p, i) => p.stock = saved.stock[i]);
-  }
-} catch { state = fresh(); }
-function persist() {
+const saved = demo.read(); state = { ...saved.state, selected: null };
+catalog.forEach((p, i) => p.stock = saved.stock[i]);
+const pending = state.pending;
+if (pending && (!materials[pending.key] || !Number.isInteger(pending.grams) || pending.grams < 1 || pending.grams > 5000 || pending.points !== Math.floor(pending.grams * materials[pending.key][3]))) state.pending = null;
+function persist(activate = false) {
   try {
-    localStorage.setItem(storageKey, JSON.stringify({ version: 2, state, stock: catalog.map(p => p.stock) }));
-    $('storageNotice').textContent = 'Demo history, wallet and inventory are saved in this browser when you leave or reload. Reset clears only the demo. Verified account history is separate.';
-  } catch { $('storageNotice').textContent = 'Browser storage is unavailable or full. Further changes cannot be saved after leaving this page.'; }
+    demo.write({ version: 2, state, stock: catalog.map(p => p.stock) }, activate);
+    $('storageNotice').textContent = 'Demo deposits, wallet, rewards and history sync with the main dashboard. Reset clears all demo views. Account records remain separate.';
+  } catch { $('storageNotice').textContent = 'Browser storage is unavailable or full. Further changes cannot be saved or synced after leaving this page.'; }
 }
 const steps = [['Identify citizen', 'QR identity recognized (demo)'], ['Inspect item', 'Illustrative material ruleset'], ['Measure weight', 'Validate simulated weight'], ['Sort & credit', 'Calculate demo points'], ['Choose outcome', 'Save points or redeem']];
 function toast(message) { $('toast').textContent = message; $('toast').classList.add('show'); setTimeout(() => $('toast').classList.remove('show'), 4000); }
 function renderSteps() { $('steps').innerHTML = steps.map((s, i) => `<div class="step ${i < state.step ? 'done' : i === state.step ? 'current' : ''}"><div class="step-dot">${i < state.step ? '✓' : i + 1}</div><div class="step-text"><b>${s[0]}</b><small>${s[1]}</small></div></div>`).join(''); }
-function render() {
+function render(activate = false) {
   $('balance').textContent = state.balance; $('wasteMetric').textContent = state.waste.toFixed(2) + ' kg';
   $('pointsMetric').textContent = state.points; $('depositMetric').textContent = state.count;
   $('walletMeter').style.width = Math.min(100, state.balance / 5) + '%'; $('activityCount').textContent = state.activity.length + ' EVENTS';
   $('activityList').innerHTML = state.activity.length ? state.activity.slice(0, 3).map(a => `<div class="activity-row"><div class="activity-left"><div class="activity-icon">${escape(a.icon)}</div><div>${escape(a.title)}<small>${escape(a.detail)}</small></div></div><span class="activity-pts">${escape(a.delta)}</span></div>`).join('') : '<div class="empty">Your simulated transactions will appear here.</div>';
   $('ledger').innerHTML = state.ledger.length ? state.ledger.map(x => `<tr><td>${escape(x.id)}</td><td>${escape(x.emoji)} ${escape(x.name)}</td><td>${escape(x.grams)} g</td><td>+${escape(x.points)} pts</td><td><span class="pill">${escape(x.status)}</span></td></tr>`).join('') : '<tr><td class="empty" colspan="5">No deposits yet. Start a simulation above.</td></tr>';
-  renderSteps(); persist();
+  renderSteps(); persist(activate);
 }
 function enableChoices(on) { $('choices').classList.toggle('hidden', !on); $('runBtn').classList.toggle('hidden', on); }
 function inputs(disabled) { $('wasteType').disabled = $('weightInput').disabled = disabled; }
@@ -76,14 +67,14 @@ async function runDeposit() {
   // A completed deposit earns credit before the optional redemption choice.
   const id = 'DEMO-' + crypto.randomUUID(); state.pending = { key, grams, points, id };
   state.balance += points; state.points += points; state.waste += grams / 1000; state.count++;
-  state.ledger.unshift({ id, name: m[0], emoji: m[1], grams, points, status: 'SAVED · CHOICE OPEN' });
+  state.ledger.unshift({ id, name: m[0], emoji: m[1], grams, points, createdAt: new Date().toISOString(), status: 'SAVED · CHOICE OPEN' });
   state.activity.unshift({ icon: m[1], title: 'Deposit · ' + m[0], detail: grams + ' g · credited to demo wallet', delta: '+' + points });
-  busy = false; showPending(); render();
+  busy = false; showPending(); render(true);
 }
 function credit() {
   if (!state.pending) return;
   const row = state.ledger.find(x => x.id === state.pending.id); if (row) row.status = 'SAVED';
-  state.pending = null; state.step = 0; ready(); render(); toast('Points saved to the demo wallet.');
+  state.pending = null; state.step = 0; ready(); render(true); toast('Points saved to the demo wallet.');
 }
 function openRewards() {
   if (busy) return toast('Wait for the deposit to finish.');
@@ -105,16 +96,18 @@ $('confirmRedeem').onclick = () => {
   if (state.selected === null) return; const p = catalog[state.selected];
   if (p.stock <= 0) return toast('This demo reward is out of stock.');
   if (p.cost > state.balance) return toast('Need ' + (p.cost - state.balance) + ' more points.');
-  state.balance -= p.cost; p.stock--;
-  if (state.pending) { const row = state.ledger.find(x => x.id === state.pending.id); if (row) row.status = 'REDEEMED'; }
-  state.activity.unshift({ icon: p.emoji, title: 'Reward · ' + p.name, detail: 'Simulated vend · ' + p.cost + ' pts', delta: '−' + p.cost });
-  state.pending = null; state.step = 0; closeRewards(); ready();
-  $('vendScreenTitle').textContent = 'VEND COMPLETE · DEMO'; $('vendScreenBig').textContent = p.emoji + ' ' + p.name;
-  render(); toast(p.name + ' redeemed. Demo inventory updated.');
+  // Spend through the same store used by the website Rewards Store.
+  try {
+    persist(); demo.redeem('demo-' + state.selected, crypto.randomUUID());
+    const saved = demo.read(); state = saved.state; catalog.forEach((p, i) => p.stock = saved.stock[i]);
+    state.pending = null; state.step = 0; closeRewards(); ready();
+    $('vendScreenTitle').textContent = 'VEND COMPLETE · DEMO'; $('vendScreenBig').textContent = p.emoji + ' ' + p.name;
+    render(true); toast(p.name + ' redeemed. Demo inventory updated.');
+  } catch (e) { toast(e.message); }
 };
 $('resetBtn').onclick = () => {
   busy = false; closeRewards(); const mode = state.mode; state = fresh(); state.mode = mode;
-  catalog.forEach((p, i) => p.stock = initialStock[i]); ready(); render(); quote(); toast('Demo history, wallet and inventory reset.');
+  catalog.forEach((p, i) => p.stock = initialStock[i]); ready(); render(true); quote(); toast('Demo history, wallet and inventory reset.');
 };
 function setMode(mode) {
   state.mode = mode; document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
@@ -126,6 +119,7 @@ $('wasteType').onchange = quote; $('weightInput').oninput = quote;
 window.addEventListener('storage', event => {
   if (event.key === storageKey && event.newValue !== JSON.stringify({ version: 2, state, stock: catalog.map(p => p.stock) })) location.reload();
 });
+window.addEventListener('pagehide', () => { busy = false; });
 function tick() { $('clock').textContent = new Date().toLocaleTimeString([], { hour12: false }); }
 ready(); if (state.pending) showPending(); else state.step = 0;
 setMode(state.mode); quote(); tick(); setInterval(tick, 1000); render();

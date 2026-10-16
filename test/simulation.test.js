@@ -21,10 +21,11 @@ function twin(storage = new Map(), delay = false) {
   };
   let nextId = 0;
   const context = vm.createContext({ document: { getElementById: element, querySelectorAll: selector => selector === '.product' ? products : [], addEventListener() {} },
-    window: { addEventListener() {} },
+    window: { addEventListener() {}, dispatchEvent() {} }, Event, URLSearchParams,
     localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
     crypto: { randomUUID: () => 'fixture-' + ++nextId }, setTimeout: fn => { if (delay) timers.push(fn); else queueMicrotask(fn); }, setInterval() {},
   });
+  vm.runInContext(readFileSync(new URL('../public/demo-store.js', import.meta.url), 'utf8'), context);
   vm.runInContext(source, context);
   return { element, products, storage, timers, state: () => JSON.parse(vm.runInContext('JSON.stringify(state)', context)) };
 }
