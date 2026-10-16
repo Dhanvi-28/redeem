@@ -128,6 +128,8 @@ Telemetry timestamps are compared as instants, including when controllers use di
 
 ## Real classifier adapter
 
+The EcoSort dry/wet YOLO adapter is in [`classifier/`](classifier/README.md). It uses the repository's trained `best.pt`, shared with the standalone Streamlit app. Run `npm run classifier:setup` to install the Python dependencies in `.local/classifier-venv` and connect empty AI endpoint settings in an existing `.env`, then run `npm run classifier` alongside the website and restart EcoSync. Run `npm run setup` first if `.env` does not exist. Existing nonempty endpoint settings are preserved. No generic-model fallback, retraining or fabricated classification is used. Its two categories are **dry** and **wet**, not the twin's eight material types. See the classifier README for setup, deployment and verification limits.
+
 Set `AI_MODEL_ENDPOINT` and optional `AI_MODEL_KEY` in `.env`, then restart. Only the backend calls the configured endpoint. It sends `{ image: "<base64 bytes without data URL prefix>", mimeType: "image/jpeg|image/png|image/webp" }`, with optional Bearer authorization. Images are limited to 5 MB decoded and checked for matching file signatures. Timeout is 20 seconds.
 
 The service must return `{ category: string, modelVersion: string, confidence?: number, guidance?: string[] }`. Confidence is 0–1; guidance must come from its configured model/ruleset. No prediction or guidance fallback is fabricated. Images stay in application memory and are not retained here; configure classifier-side retention separately. Photo scans always return zero points. Without an endpoint the UI/API say **AI classification is not configured**.

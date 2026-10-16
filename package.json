@@ -14,7 +14,9 @@
     "db:local": "node scripts/local-db.js",
     "setup": "node scripts/setup.js",
     "admin": "node scripts/admin.js",
-    "catalogue:setup": "node scripts/catalogue.js"
+    "catalogue:setup": "node scripts/catalogue.js",
+    "classifier": "node scripts/classifier.js",
+    "classifier:setup": "node scripts/setup-classifier.js"
   },
   "repository": {
     "type": "git",

@@ -8,6 +8,7 @@ const config = {
   trustProxy: process.env.TRUST_PROXY_HOPS ? Number(process.env.TRUST_PROXY_HOPS) : 0,
   production: process.env.NODE_ENV === 'production',
   aiEndpoint: process.env.AI_MODEL_ENDPOINT, aiKey: process.env.AI_MODEL_KEY,
+  aiHealthEndpoint: process.env.AI_HEALTH_ENDPOINT,
 };
 if (!Number.isInteger(config.trustProxy) || config.trustProxy < 0) throw new Error('TRUST_PROXY_HOPS must be a non-negative integer.');
 if (config.production && !config.frontendUrl.startsWith('https://')) throw new Error('Production FRONTEND_URL must use HTTPS.');

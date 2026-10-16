@@ -63,7 +63,16 @@ export function createApp({ db, client, config }) {
     await c('sessions').insertOne({ tokenHash: hash(value), userId, expiresAt: new Date(Date.now() + cookieOptions.maxAge) });
     res.cookie('ecosync_session', value, cookieOptions);
   }
-  app.get('/api/health', async (req, res) => { await db.command({ ping: 1 }); res.json({ status: 'ok', aiConfigured: Boolean(config.aiEndpoint) }); });
+  async function classifierHealth() {
+    if (!config.aiEndpoint) return { aiConfigured: false, aiAvailable: false, aiMessage: 'AI classification is not configured.' };
+    if (!config.aiHealthEndpoint) return { aiConfigured: true };
+    try {
+      const response = await fetch(config.aiHealthEndpoint, { signal: AbortSignal.timeout(2000) });
+      const result = parse(z.object({ ready: z.boolean(), message: z.string().max(300).optional(), categories: z.array(text).max(30).optional() }), await response.json());
+      return { aiConfigured: true, aiAvailable: response.ok && result.ready, aiMessage: result.message || (result.ready ? 'Classifier ready.' : 'Classifier model is unavailable.'), aiCategories: result.categories || [] };
+    } catch { return { aiConfigured: true, aiAvailable: false, aiMessage: 'Classifier service is offline. Start the configured classifier service.' }; }
+  }
+  app.get('/api/health', async (req, res) => { await db.command({ ping: 1 }); res.json({ status: 'ok', ...await classifierHealth() }); });
   app.post('/api/auth/register', async (req, res) => {
     const data = parse(credentials.extend({ name: text }).strict(), req.body);
     const passwordHash = await bcrypt.hash(data.password, 12);
@@ -130,6 +139,7 @@ export function createApp({ db, client, config }) {
   });
   app.post('/api/scan', limit(60000, 10), auth, async (req, res) => {
     if (!config.aiEndpoint) fail(503, 'AI classification is not configured.');
+    if (config.aiHealthEndpoint) { const health = await classifierHealth(); if (!health.aiAvailable) fail(503, health.aiMessage); }
     const input = parse(z.object({ image: z.string().max(7000000), mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']) }).strict(), req.body);
     if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.image)) fail(422, 'Invalid image encoding.');
     const bytes = Buffer.from(input.image, 'base64');

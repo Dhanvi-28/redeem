@@ -2,7 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdtempSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import request from 'supertest';
 import { startMongo } from '../scripts/mongo-process.js';
@@ -16,6 +16,26 @@ const origin = 'http://localhost:3000';
 const write = (agent, path, body, method = 'post') => agent[method](path).set('Origin', origin).send(body);
 const controller = (path, body, credential = wasteCredential) => request(app).post('/api/machine' + path).set('Authorization', 'Bearer ' + credential).send(body);
 const password = 'test-Only-Passphrase-2026';
+test('real YOLO predictions pass through authenticated EcoSync scanning without crediting wallets', { skip: !process.env.ECOSYNC_REAL_CLASSIFIER_URL }, async () => {
+  const endpoint = process.env.ECOSYNC_REAL_CLASSIFIER_URL;
+  const live = createApp({ db, client, config: { identityKey, frontendUrl: origin, test: true,
+    aiEndpoint: `${endpoint}/predict`, aiHealthEndpoint: `${endpoint}/health`, aiKey: process.env.AI_MODEL_KEY } });
+  const citizen = request.agent(live);
+  await write(citizen, '/api/auth/login', { email: 'citizen@test.invalid', password }).expect(200);
+  const health = await citizen.get('/api/health');
+  assert.equal(health.body.aiAvailable, true);
+  assert.deepEqual(health.body.aiCategories, ['dry', 'wet']);
+  const before = (await citizen.get('/api/wallet')).body.wallet;
+  for (const file of ['dry/R_10001.jpg', 'wet/O_12568.jpg']) {
+    const image = readFileSync(new URL(`../sample_images/${file}`, import.meta.url)).toString('base64');
+    const result = await write(citizen, '/api/scan', { image, mimeType: 'image/jpeg' });
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.ok(['dry', 'wet'].includes(result.body.category));
+    assert.match(result.body.modelVersion, /^ecosort-yolo-/);
+    assert.equal(result.body.pointsAwarded, 0);
+  }
+  assert.deepEqual((await citizen.get('/api/wallet')).body.wallet, before);
+});
 async function newSession() {
   const r = await controller('/identify', { qrToken }); assert.equal(r.status, 200, JSON.stringify(r.body)); return r.body.sessionId;
 }
