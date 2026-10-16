@@ -13,7 +13,8 @@
     "check": "node --check server/app.js && node --check server/domain.js && node --check public/app.js && node --check public/scanner.js && node --check public/simulation.js",
     "db:local": "node scripts/local-db.js",
     "setup": "node scripts/setup.js",
-    "admin": "node scripts/admin.js"
+    "admin": "node scripts/admin.js",
+    "catalogue:setup": "node scripts/catalogue.js"
   },
   "repository": {
     "type": "git",

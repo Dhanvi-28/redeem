@@ -36,6 +36,8 @@ The local database binds to **127.0.0.1:27018** with data in ignored `.local/mon
 
 ### First administrator and real catalogue
 
+To configure the eight starter products requested for the store, run `npm run catalogue:setup` (or `node scripts/catalogue.js`). This explicitly adds product definitions with suggested point prices and **zero stock**; it never invents physical inventory or user points. It preserves existing products and is safe to repeat. The store shows these cards as awaiting stock. An administrator must reconcile supplied inventory in **Rewards & Inventory** before redemption is available. This is an explicit catalogue configuration command; normal server startup and automated tests do not populate business records.
+
 Register your account through the site, then use a trusted server terminal:
 
 ```powershell

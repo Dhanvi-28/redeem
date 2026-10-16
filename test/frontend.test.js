@@ -2,6 +2,26 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { starterRewards } from '../server/catalogue.js';
+
+test('configured starter rewards render as product cards and cannot redeem without stock', async () => {
+  const elements = new Map();
+  const element = selector => {
+    if (!elements.has(selector)) elements.set(selector, { innerHTML: '', setAttribute() {} });
+    return elements.get(selector);
+  };
+  const context = vm.createContext({ document: { querySelector: element, querySelectorAll: () => [] }, location: { hash: '#rewards' },
+    window: { addEventListener() {} }, sessionStorage: {},
+    fetch: async path => ({ ok: true, json: async () => path === '/api/me' ? { _id: 'fixture', name: 'Fixture', role: 'admin' } : path === '/api/wallet' ? { wallet: { balance: 500 } } : starterRewards.map((r, i) => ({ ...r, _id: String(i), stock: 0, active: true, machineId: null })) }),
+  });
+  vm.runInContext(readFileSync(new URL('../public/app.js', import.meta.url), 'utf8'), context);
+  await new Promise(resolve => setImmediate(resolve));
+  const html = element('#main').innerHTML;
+  for (const reward of starterRewards) assert.ok(html.includes(reward.name));
+  assert.equal((html.match(/class="card reward-card"/g) || []).length, 8);
+  assert.equal((html.match(/data-reward="\d+" disabled/g) || []).length, 8);
+  assert.match(html, /Awaiting stock/); assert.match(html, /Manage inventory/);
+});
 
 test('a slow page response cannot overwrite a newer navigation', async () => {
   const elements = new Map(); let changePage, resolveDashboard;
